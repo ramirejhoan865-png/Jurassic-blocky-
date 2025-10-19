@@ -1,0 +1,47 @@
+-- Nombre: AmberCollector
+-- Propósito: Maneja la lógica de la recolección del ámbar al ser tocado por un jugador.
+
+local Amber = script.Parent
+local DEBOUNCE_TIME = 1 -- Tiempo en segundos para evitar recolecciones accidentales o duplicadas.
+
+local debounce = false
+
+-- Función que se ejecuta cuando algo toca el ámbar
+local function onPartTouched(otherPart)
+    -- 1. Verificación de Debounce
+    if debounce then return end
+    
+    -- 2. Verificar si lo que tocó es un jugador
+    local character = otherPart.Parent
+    local player = game.Players:GetPlayerFromCharacter(character)
+    
+    if player then
+        -- Encontramos un jugador, ¡comienza la recolección!
+        
+        -- Evita recolecciones duplicadas por un corto tiempo
+        debounce = true
+        
+        -- 3. Aumentar el contador del jugador
+        -- Debes tener un valor 'AmberCount' en el jugador. Lo crearemos después.
+        local stats = player:FindFirstChild("PlayerStats") -- El folder donde guardamos las estadísticas
+        if stats then
+            local amberCount = stats:FindFirstChild("AmberCount")
+            if amberCount and amberCount:IsA("IntValue") then
+                amberCount.Value = amberCount.Value + 1 -- ¡Aumenta el ámbar!
+                
+                -- 4. Retroalimentación visual y sonora (Opcional)
+                -- Puedes añadir un sonido aquí: game.SoundService.CollectSound:Play()
+                
+                -- 5. Eliminar el ámbar del mapa
+                Amber:Destroy()
+            end
+        end
+        
+        -- Restablecer el debounce después de un breve momento
+        task.wait(DEBOUNCE_TIME)
+        debounce = false
+    end
+end
+
+-- Conecta la función al evento 'Touched' de la pieza del ámbar
+Amber.Touched:Connect(onPartTouched)
