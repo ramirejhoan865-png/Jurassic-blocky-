@@ -1,0 +1,117 @@
+-- Client-side: StarterGui -> LocalScript (o dentro de una ScreenGui)
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local player = Players.LocalPlayer
+local TryClaimBrainrot = ReplicatedStorage:WaitForChild("TryClaimBrainrot")
+
+-- UI: crear un botón simple si no existe
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "BrainrotFinderGui"
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(0,200,0,50)
+button.Position = UDim2.new(0.5, -100, 0.1, 0)
+button.Text = "Buscar Brainrots >10M"
+button.Parent = screenGui
+
+local searching = false
+
+-- Función que obtiene candidate brainrots del Workspace.
+-- Adapta el filtro a cómo tus objetos están estructurados (por nombre, tag o propiedad).
+local function ObtenerBrainrots()
+    local results = {}
+    -- Ejemplo: supongamos que los Brainrots están bajo Workspace.Brainrots como modelos con IntValue 'Price'
+    local container = workspace:FindFirstChild("Brainrots")
+    if not container then
+        -- Buscar en todo el Workspace como fallback
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj:IsA("Model") and obj:FindFirstChild("Price") and tonumber(obj.Price.Value) then
+                table.insert(results, {Instance = obj, Name = obj.Name, Value = tonumber(obj.Price.Value)})
+            end
+        end
+    else
+        for _, obj in pairs(container:GetChildren()) do
+            if obj:IsA("Model") and obj:FindFirstChild("Price") and tonumber(obj.Price.Value) then
+                table.insert(results, {Instance = obj, Name = obj.Name, Value = tonumber(obj.Price.Value)})
+            end
+        end
+    end
+    return results
+end
+
+-- Intentar enviar al servidor con reintentos sobre distintos candidatos.
+local function buscarYEnviar()
+    if searching then return end
+    searching = true
+    button.Text = "Buscando..."
+    print("Iniciando búsqueda de Brainrots > 10,000,000")
+
+    local foundAndSent = false
+
+    while not foundAndSent and searching do
+        local candidates = ObtenerBrainrots()
+        -- ordenar opcionalmente por valor descendente
+        table.sort(candidates, function(a,b) return a.Value > b.Value end)
+
+        if #candidates == 0 then
+            -- no hay candidatos, espera un poco y vuelve a intentar
+            wait(2)
+        else
+            for _, info in ipairs(candidates) do
+                if info.Value >= 10000000 then
+                    -- Prepara la info que enviaremos al servidor
+                    local payload = {
+                        Name = info.Name,
+                        Value = info.Value,
+                        -- podrías incluir info adicional, p.ej. id, posición, etc.
+                    }
+
+                    -- Invocar al servidor y recibir true/false
+                    local success, result = pcall(function()
+                        return TryClaimBrainrot:InvokeServer(payload)
+                    end)
+
+                    if not success then
+                        warn("Error al invocar servidor:", result)
+                        -- si falla la invocación, esperar y seguir intentando con otros
+                        wait(1)
+                    else
+                        if result == true then
+                            print("Servidor aceptó el brainrot:", payload.Name, payload.Value)
+                            foundAndSent = true
+                            break
+                        else
+                            print("Servidor rechazó (o no disponible) el brainrot:", payload.Name)
+                            -- sigue buscando otro
+                        end
+                    end
+
+                    -- breve pausa para evitar invocar demasiado rápido
+                    wait(0.3)
+                end
+            end
+
+            -- Si no encontró nada útil en esta pasada, espera antes de reintentar
+            if not foundAndSent then
+                wait(1.5)
+            end
+        end
+    end
+
+    if foundAndSent then
+        button.Text = "Encontrado y enviado ✅"
+    else
+        button.Text = "Buscar Brainrots >10M"
+    end
+    searching = false
+end
+
+button.MouseButton1Click:Connect(function()
+    if not searching then
+        -- Ejecutar en un hilo separado
+        spawn(function()
+            buscarYEnviar()
+        end)
+    end
+end)
